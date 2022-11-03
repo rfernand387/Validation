@@ -1,0 +1,116 @@
+# parameters
+sampleFileName = "/home/richard_fernandes/validation/LAI7dDictionary.pkl"
+variableName = "LAI"
+sites_North_America = ['Barrow','BartlettExperimentalForest','BlandyExperimentalFarm','Bondville','Boulder','CentralPlainsExperimentalRange','DeadLake','DesertRock','DesMoines','DisneyWildernessPreserve','DukeForest', \
+                        'FortPeck','GoodwinCreek','GuanicaForest','HarvardForest','ImnavaitCreek','JonesEcologicalResearchCenter','Jornada','KonazPrairieBiologicalStation','LajasExperimentalStation','Manhattan','Moab', \
+                       'NiwotRidgeForest','NiwotRidgeMountainResearchStation','NorthSterling','OakRidge','OnaquiAult','OrdwaySwisherBiologicalStation','RockSprings','SantaBarbara','SantaRita','SiouxFallsSurfRad',\
+                       'SiousFallsUscrn','SmithsonianConservationBiologyInstitute','SmithsonianEnvironmentalResearchCenter','SouthernGreatPlains','StiegerwaldtLandServices','TableMountan',\
+                       'TalladegaNationalForest','TonziRanch','Underc','WalnutGulchKendall','Williams','Woodworth','YosemiteVillage', \
+                        'Geraldton2020', 'HayRiver2019' ,'Labrador2019' ,'Merbleue2019','MtPolley2019','PeaceRiver2019' ,'TurkeyPoint2019' ,'VancouverIsland2019','YellowKnife2019', 'NovaScotia2021']
+treed_IGBP_class = ['Evergreen Broadleaf', 'Evergreen Needleleaf','Open Shrublands', 'Mixed Forest', 'Closed Shrublands','Deciduous Broadleaf']
+
+
+# open sample file and also the original file used
+with open(sampleFileName, "rb") as fp:   #Pickling
+    sampleDictionary = pickle.load(fp)
+
+# renames columns of in-situ validation samples to standard names
+def renameColumns(siteDF) :
+    if 'GBOV' in siteDF.name:   
+        siteDF['network'] = 'GBOV'
+        newNames = {'Site': 'Site', \
+                        'FCOVER_down': 'fCOVER_down', \
+                        'FCOVER_up': 'fCOVER_up', \
+                        'FCOVER_down_err': 'fCOVER_down_std', \
+                        'FCOVER_up_err': 'fCOVER_up_std', \
+                        'FIPAR_down': 'fAPAR_down', \
+                        'FIPAR_up': 'fAPAR_up', \
+                        'FIPAR_down_err': 'fAPAR_down_std', \
+                        'FIPAR_up_err': 'fAPAR_up_std', \
+                        'LAI_Warren_up': 'PAI_up', \
+                        'LAI_Warren_down': 'PAI_down', \
+                        'LAIe_Warren_up': 'PAIe_up', \
+                        'LAIe_Warren_down': 'PAIe_down', \
+                        'LAIe_Miller_up': 'PAIe_Miller_up', \
+                        'LAIe_Miller_down': 'PAIe_Miller_down', \
+                        'LAI_Warren_up_err': 'PAI_up_err', \
+                        'LAI_Warren_down_err': 'PAI_down_err', \
+                        'LAIe_Warren_up_err': 'PAIe_up_err', \
+                        'LAIe_Warren_down_err': 'PAIe_down_err', \
+                        'LAIe_Miller_up_err': 'PAIe_Miller_up_err', \
+                        'LAIe_Miller_down_err': 'PAIe_Miller_down_err'} 
+    elif 'CCRS' in siteDF.name:
+        siteDF['network'] = 'CCRS'
+        siteDF['IGBP_class'] = 'Mixed Forest'
+        siteDF.loc[siteDF['BF']>0.75,'IGBP_Class'] = 'Deciduous Broadleaf'
+        siteDF.loc[siteDF['BF']<0.25,'IGBP_Class'] = 'Evergreen Needleleaf'
+        newNames = {'Location': 'Site', \
+                    'BF' : 'fBroadleaf' , \
+                    'NF': 'fNeedleafleaf' , \
+                    'fcover_Down': 'fCOVER_down', \
+                    'fcover_Up': 'fCOVER_up', \
+                    'fcoverstd_Down': 'fCOVER_down_std', \
+                    'fcoverstd_Up': 'fCOVER_up_std', \
+                    'Daily_Integrated_Black_Sk_yfAPAR_Down': 'fAPAR_down', \
+                    'Daily_Integrated_Black_Sk_yfAPAR_Up': 'fAPAR_up' , \
+                    'PAICEV61_Up': 'PAI_up', \
+                    'PAICEV61_Down': 'PAI_down', \
+                    'PAIeCEV61_Up': 'PAIe_up', \
+                    'PAIeCEV61_Down':'PAIe_down', \
+                    'PAIEMiller_Up': 'PAIe_Miller_up', \
+                    'PAIEMiller_Down':'PAIe_Miller_down', \
+                    'Woody_Fraction_average':'WAItoPAIratio', \
+                    'Woody_Fraction_std': 'WAItoPAIratio_std' }  
+    
+    return  siteDF.rename(columns = newNames)
+
+
+# process data
+sitesList = sampleDictionary.keys()
+samplesDF = pd.DataFrame();
+for key in sitesList:
+
+    #convert list to pandas data frame, rename columns, filter for North America
+    siteDF = pd.concat([pd.DataFrame(sampleDictionary[key]),pd.DataFrame([key] * len(sampleDictionary[key]),columns=['geeFeatureCollection'])],axis=1)
+    siteDF.name = key
+    siteDF = renameColumns(siteDF)
+    siteDF = siteDF.loc[siteDF['IGBP_class'].isin(treed_IGBP_class)]
+    siteDF = siteDF.loc[siteDF['Site'].isin(sites_North_America)].reset_index()
+    #number of sames and number valid samples
+    numValid = []
+    numSamples = []
+    for index,site in siteDF.iterrows():
+        siteQC = site['sample'+variableName][1]['data']
+        numSamples.append(len(siteQC))
+        numValid.append(len(siteQC) - np.count_nonzero(siteQC))
+    numSamplesDF= pd.DataFrame(numSamples,columns=['numSamples'])
+    numValidDF = pd.DataFrame(numValid,columns=['numValid'])
+    siteDF = pd.concat([siteDF,numSamplesDF, numValidDF],axis=1)
+    samplesDF = pd.concat([samplesDF,siteDF],axis=0,ignore_index=True)
+samplesDF[['PAI_up','PAI_down','PAIe_up','PAIe_down']] = samplesDF[['PAI_up','PAI_down','PAIe_up','PAIe_down']].apply(pd.to_numeric)
+samplesDF = samplesDF.replace(-999, 0)
+samplesDF['percentValid'] = samplesDF['numValid'] / samplesDF['numSamples']
+samplesDF['PAI_total'] = samplesDF['PAI_up']+samplesDF['PAI_down'] 
+samplesDF['PAIe_total'] = samplesDF['PAIe_up']+samplesDF['PAIe_down'] 
+samplesDF['CLUMPING_total'] = samplesDF['PAIe_total'] / samplesDF['PAI_total']
+
+
+# summary stats of in-situ data includ those with no match ups and then keep only those wioth matchups
+# print('Total in-situ samples per network:',samplesDF.groupby('network').count()['numSamples'])
+# print('Total in-situ samples per site:',samplesDF.groupby('Site').count()['numSamples'])
+# print('Total in-situ samples per site:',samplesDF.groupby('Site').first()['network'])
+varName = 'CLUMPING_total'
+print('Total in-situ samples per site:',samplesDF.groupby('Site').median()[varName])
+print('Total in-situ samples per site:',samplesDF.groupby('Site').min()[varName])
+print('Total in-situ samples per site:',samplesDF.groupby('Site').max()[varName])
+
+
+# summary stats for ESUs with match ups 
+samplesDF = samplesDF.loc[samplesDF['numValid']>0].replace(-999, 0)
+# print('Total in-situ samples per network:',samplesDF.groupby('network').count()['numSamples'])
+# print('Total in-situ samples per site:',samplesDF.groupby('Site').first()['IGBP_class'])
+# # print('Total in-situ samples per network:',samplesDF.groupby('Site').mean()['numSamples'])
+# print('Total in-situ samples per network:',samplesDF.groupby('Site').mean()['PAI_up'])
+print(samplesDF.groupby('Site').mean())
+# print('Total in-situ samples per network:',samplesDF.groupby('Site').mean()['percentValid'])
+# print('IGBP land cover classes:',samplesDF.groupby(['Site', 'IGBP_class']).agg({'IGBP_class': ['count']}))
